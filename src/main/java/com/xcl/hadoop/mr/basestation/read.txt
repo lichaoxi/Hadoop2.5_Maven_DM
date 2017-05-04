@@ -1,0 +1,4 @@
+输入数据input.png，两种不同格式的数据序列解析的方式不同，解析IMSI（用户id）LOC（基站）TIME（时间）三个字段
+ * 输入参数 < input path > < output path > < date > < timepoint > 
+ * 参数示例： “/base /output 2012-09-12 00-09-17-24" 
+ * 意味着以“/base”为输入，"/output"为输出，指定计算2012年09月12日的数据，并分为00-09，09-17，17-24三个时段 
