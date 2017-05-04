@@ -1,0 +1,80 @@
+输入数据，不需要编写代码，用pig与datafu处理，预测用户下一个位置。
+pig
+
+ls /
+
+copyFromLocal /home/hadoop/data /hadoop/nextPosition
+
+cd /hadoop/nextPosition
+
+ls
+
+cat data
+
+�������
+data = LOAD 'data' USING PigStorage('|') AS (imsi:chararray,time:chararray,loc:chararray);
+�鿴�ṹ
+describe data;
+�鿴����ֵ
+dump data;
+
+
+��CustomFormatToISOʹ��˵����http://pig.apache.org/docs/r0.16.0/api/
+joda-time���ص�ַ��http://maven.ibiblio.org/maven2/joda-time/
+
+REGISTER /home/hadoop/app/pig-0.16.0/contrib/piggybank/java/piggybank.jar
+REGISTER /home/hadoop/app/pig-0.16.0/contrib/piggybank/java/joda-time-1.6.jar
+DEFINE CustomFormatToISO org.apache.pig.piggybank.evaluation.datetime.convert.CustomFormatToISO();
+
+ת������
+toISO = FOREACH data GENERATE imsi,CustomFormatToISO(SUBSTRING(time,0,13),'YYYY-MM-dd HH') AS time:chararray,loc;
+
+��imsi����
+grp = GROUP toISO BY imsi;
+
+datafu���ص�ַ��http://maven.ibiblio.org/maven2/com/linkedin/datafu/datafu/1.0.0/
+�����������������NN���
+REGISTER /home/hadoop/datafu-1.0.0.jar
+
+DEFINE MarkovPairs datafu.pig.stats.MarkovPairs();
+
+pairs = FOREACH grp
+{
+sorted = ORDER toISO BY time;
+pair = MarkovPairs(sorted);
+GENERATE FLATTEN(pair) AS (data:tuple(imsi,time,loc),next:tuple(imsi,time,loc));
+}
+
+describe pairs;
+
+prj = FOREACH pairs GENERATE data.imsi AS imsi,data.time AS time,next.time  AS next_time,data.loc AS loc,next.loc AS next_loc;
+
+����ʱ����һ��
+DEFINE ISODaysBetween org.apache.pig.piggybank.evaluation.datetime.diff.ISODaysBetween();
+ flt = FILTER prj BY ISODaysBetween(next_time,time)==0L;
+
+�������
+1.������ʼλ����Ŀ
+total_count = FOREACH (GROUP flt BY loc) GENERATE group AS loc,COUNT(flt) AS total;
+2.����һ��λ����Ŀ
+pairs_count = FOREACH (GROUP flt BY (loc,next_loc)) GENERATE FLATTEN(group) AS (loc,next_loc),COUNT(flt) AS cnt;
+
+������
+jnd = JOIN pairs_count BY loc,total_count BY loc USING 'replicated';
+
+prob = FOREACH jnd GENERATE pairs_count::loc AS loc,pairs_count::next_loc AS next_loc,(double)cnt/(double)total AS probability;
+
+
+top3 = FOREACH(GROUP prob BY loc)
+{
+sorted = ORDER prob BY probability DESC;
+top = LIMIT sorted 3;
+GENERATE FLATTEN(top);
+}
+
+
+
+STORE top3 INTO 'output';
+
+cat output
+
